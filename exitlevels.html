@@ -8,7 +8,8 @@
        contracts you plan to close at that level to see scale-out P/L,
        remaining contracts, and cumulative P/L.
     Results update as you type. The ladder lists levels from highest price to lowest,
-    with your entry in the middle. Scale-outs are applied from the lowest TP upward.
+    with your entry in the middle. Clear blanks the entry, sets contracts to 1 and stop to 20%,
+    and restores take-profits to 20% and 50%. Scale-outs are applied from the lowest TP upward.
     P/L = (exit - entry) x 100 per contract. No fees included.
   Host on GitHub Pages or just open this file in a browser.
 -->
@@ -69,6 +70,11 @@
   .add { margin-top:4px; width:100%; padding:10px; background:none; color:var(--brass); font:14px var(--sans);
          border:1px dashed #4A5A72; border-radius:3px; cursor:pointer; }
   .add:hover { border-color:var(--brass); }
+  .panel-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:18px; }
+  .panel-head h2 { margin:0; }
+  .clear { padding:6px 14px; background:none; color:var(--slate); font:13px var(--sans);
+           border:1px solid var(--rule); border-radius:3px; cursor:pointer; }
+  .clear:hover { color:var(--ivory); border-color:var(--slate); }
   button:focus-visible { outline:2px solid var(--brass); outline-offset:2px; }
 
   /* Ladder */
@@ -123,7 +129,7 @@
 
   <div class="layout">
     <section class="panel" aria-label="Position">
-      <h2>Position</h2>
+      <div class="panel-head"><h2>Position</h2><button class="clear" id="clear" type="button">Clear</button></div>
       <div class="basics">
         <label class="field"><span>Entry premium</span>
           <input id="entry" type="number" inputmode="decimal" step="0.01" min="0" value="1.00"></label>
@@ -241,6 +247,12 @@
 
   document.addEventListener('input', calc);
   $('add').onclick = () => addTP();
+  $('clear').onclick = () => {
+    $('entry').value = ''; $('qty').value = '1'; $('stop').value = '20';
+    tpsEl.innerHTML = '';
+    addTP(20); addTP(50);
+    $('entry').focus();
+  };
   addTP(20);
   addTP(50);
 </script>
