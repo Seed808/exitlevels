@@ -7,7 +7,8 @@
     3. Add take-profit % levels (e.g. 20, 50). "Sell" is optional: enter how many
        contracts you plan to close at that level to see scale-out P/L,
        remaining contracts, and cumulative P/L.
-    Results update as you type. TPs are evaluated in ascending % order.
+    Results update as you type. The ladder lists levels from highest price to lowest,
+    with your entry in the middle. Scale-outs are applied from the lowest TP upward.
     P/L = (exit - entry) x 100 per contract. No fees included.
   Host on GitHub Pages or just open this file in a browser.
 -->
@@ -15,59 +16,150 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0F1B2D">
 <title>ExitLevls Calculator</title>
 <style>
-  :root { --bg:#0f1115; --panel:#181b22; --line:#2a2f3a; --text:#e6e8ec; --dim:#8a919e; --red:#ff5c5c; --green:#3ddc84; }
+  :root {
+    --ink:#0F1B2D;      /* page */
+    --ink-2:#15243A;    /* panels */
+    --rule:#2A3B55;     /* hairlines */
+    --ivory:#ECE6D8;    /* text */
+    --slate:#8E9AAD;    /* secondary text */
+    --brass:#B89B5E;    /* entry / accent */
+    --loss:#D9776B;
+    --gain:#6FBF8E;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
   * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
-  main { max-width:900px; margin:0 auto; padding:24px 16px; }
-  h1 { font-size:18px; font-weight:600; margin:0 0 20px; }
-  .grid { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:16px; }
-  label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--dim); }
-  input { width:120px; padding:8px 10px; background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:6px; font-size:15px; }
-  input:focus { outline:none; border-color:#4a90e2; }
-  .tp-row { display:flex; gap:12px; align-items:flex-end; margin-bottom:8px; }
-  button { padding:8px 12px; background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:6px; cursor:pointer; font-size:14px; }
-  button:hover { border-color:var(--dim); }
-  .x { color:var(--dim); }
-  h2 { font-size:13px; color:var(--dim); font-weight:500; margin:20px 0 8px; text-transform:uppercase; letter-spacing:.05em; }
-  .table-wrap { overflow-x:auto; }
-  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
-  th, td { padding:8px 10px; text-align:right; border-bottom:1px solid var(--line); white-space:nowrap; }
-  th { font-size:12px; color:var(--dim); font-weight:500; }
+  html { -webkit-text-size-adjust:100%; }
+  body { margin:0; background:var(--ink); color:var(--ivory); font:15px/1.5 var(--sans); }
+  .num { font-variant-numeric:tabular-nums lining-nums; }
+
+  .wrap { max-width:1080px; margin:0 auto; padding:40px 24px 56px; }
+
+  header { display:flex; align-items:baseline; justify-content:space-between; gap:16px; flex-wrap:wrap;
+           padding-bottom:20px; border-bottom:1px solid var(--rule); margin-bottom:32px; }
+  h1 { font-family:var(--serif); font-weight:400; font-size:34px; line-height:1.1; margin:0; letter-spacing:.005em; }
+  header p { margin:0; color:var(--slate); font-size:14px; }
+
+  .layout { display:grid; grid-template-columns:280px minmax(0,1fr); gap:28px; align-items:start; }
+  .layout > section { min-width:0; }
+
+  /* Position panel */
+  .panel { background:var(--ink-2); border:1px solid var(--rule); border-radius:4px; padding:24px; }
+  h2 { font-family:var(--serif); font-weight:400; font-size:20px; margin:0 0 18px; }
+  .field { display:block; margin-bottom:18px; }
+  .field span { display:block; font-size:13px; color:var(--slate); margin-bottom:6px; }
+  input { width:100%; padding:10px 12px; font:16px var(--sans); font-variant-numeric:tabular-nums;
+          color:var(--ivory); background:var(--ink); border:1px solid var(--rule); border-radius:3px;
+          -moz-appearance:textfield; }
+  input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+  input:focus { outline:none; border-color:var(--brass); box-shadow:0 0 0 1px var(--brass); }
+  input::placeholder { color:#55647B; }
+
+  .tp-head { display:flex; justify-content:space-between; align-items:baseline; margin:26px 0 10px;
+             padding-top:20px; border-top:1px solid var(--rule); }
+  .tp-head h2 { margin:0; font-size:18px; }
+  .tp-cols { display:grid; grid-template-columns:1fr 1fr 32px; gap:10px; font-size:13px; color:var(--slate); margin-bottom:6px; }
+  .tp-row { display:grid; grid-template-columns:1fr 1fr 32px; gap:10px; margin-bottom:10px; align-items:center; }
+  .remove { width:32px; height:32px; padding:0; background:none; border:1px solid transparent; border-radius:3px;
+            color:var(--slate); font-size:18px; line-height:1; cursor:pointer; }
+  .remove:hover { color:var(--loss); border-color:var(--rule); }
+  .add { margin-top:4px; width:100%; padding:10px; background:none; color:var(--brass); font:14px var(--sans);
+         border:1px dashed #4A5A72; border-radius:3px; cursor:pointer; }
+  .add:hover { border-color:var(--brass); }
+  button:focus-visible { outline:2px solid var(--brass); outline-offset:2px; }
+
+  /* Ladder */
+  .ladder-head { display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-bottom:12px; }
+  .ladder-head h2 { margin:0; }
+  .summary { color:var(--slate); font-size:13px; }
+  .table-wrap { overflow-x:auto; border:1px solid var(--rule); border-radius:4px; background:var(--ink-2); }
+  table { width:100%; border-collapse:collapse; }
+  th, td { padding:13px 11px; text-align:right; white-space:nowrap; }
+  thead th { font-weight:500; font-size:12px; color:var(--slate); border-bottom:1px solid var(--rule); background:var(--ink-2); }
+  thead th.group { border-left:1px solid var(--rule); }
+  tbody td { border-bottom:1px solid #1F2E45; }
+  tbody tr:last-child td { border-bottom:none; }
   th:first-child, td:first-child { text-align:left; }
-  .stop td:first-child, .stop .price { color:var(--red); font-weight:600; }
-  .tp td:first-child, .tp .price { color:var(--green); font-weight:600; }
-  .neg { color:var(--red); } .pos { color:var(--green); }
-  .muted { color:var(--dim); }
-  .note { font-size:12px; color:var(--dim); margin-top:10px; }
+  td.level { border-left:3px solid transparent; font-weight:500; }
+  td.split { border-left:1px solid var(--rule); }
+  td.price { font-family:var(--serif); font-size:19px; }
+
+  tr.tp td.level { border-left-color:var(--gain); color:var(--gain); }
+  tr.tp td.price { color:var(--gain); }
+  tr.stop td.level { border-left-color:var(--loss); color:var(--loss); }
+  tr.stop td.price { color:var(--loss); }
+  tr.entry td { background:rgba(184,155,94,.07); color:var(--brass); }
+  tr.entry td.level { border-left-color:var(--brass); }
+
+  .neg { color:var(--loss); } .pos { color:var(--gain); } .dash { color:#4E5D74; }
+  .note { margin-top:12px; font-size:13px; color:var(--brass); min-height:1em; }
+  footer { margin-top:28px; padding-top:16px; border-top:1px solid var(--rule); color:var(--slate); font-size:12px; }
+  .empty { padding:28px 16px; color:var(--slate); text-align:center; }
+
+  @media (max-width:860px) {
+    .wrap { padding:24px 16px 40px; }
+    h1 { font-size:28px; }
+    .layout { grid-template-columns:minmax(0,1fr); gap:24px; }
+    .panel { padding:18px; }
+    .ladder-head { flex-direction:column; gap:2px; }
+    .basics { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+    .basics .field { margin-bottom:0; }
+    th, td { padding:11px 10px; }
+    td.price { font-size:17px; }
+    th:first-child, td:first-child { position:sticky; left:0; background:var(--ink-2); z-index:1; }
+    tr.entry td:first-child { background:#1D2A3B; }
+  }
 </style>
 </head>
 <body>
-<main>
-  <h1>ExitLevls Calculator</h1>
+<div class="wrap">
+  <header>
+    <h1>ExitLevls Calculator</h1>
+    <p>Stop and take-profit levels for an options position</p>
+  </header>
 
-  <div class="grid">
-    <label>Entry premium <input id="entry" type="number" step="0.01" min="0" value="1.00"></label>
-    <label>Contracts <input id="qty" type="number" step="1" min="1" value="1"></label>
-    <label>Stop-loss % <input id="stop" type="number" step="1" min="0" value="20"></label>
+  <div class="layout">
+    <section class="panel" aria-label="Position">
+      <h2>Position</h2>
+      <div class="basics">
+        <label class="field"><span>Entry premium</span>
+          <input id="entry" type="number" inputmode="decimal" step="0.01" min="0" value="1.00"></label>
+        <label class="field"><span>Contracts</span>
+          <input id="qty" type="number" inputmode="numeric" step="1" min="1" value="1"></label>
+        <label class="field"><span>Stop-loss %</span>
+          <input id="stop" type="number" inputmode="decimal" step="1" min="0" value="20"></label>
+      </div>
+
+      <div class="tp-head"><h2>Take-profits</h2></div>
+      <div class="tp-cols"><span>Gain %</span><span>Contracts to sell</span><span></span></div>
+      <div id="tps"></div>
+      <button class="add" id="add" type="button">Add take-profit</button>
+    </section>
+
+    <section aria-label="Exit ladder">
+      <div class="ladder-head">
+        <h2>Exit ladder</h2>
+        <span class="summary num" id="summary"></span>
+      </div>
+      <div class="table-wrap">
+        <table class="num">
+          <thead>
+            <tr>
+              <th>Level</th><th>Price</th><th>P/L per contract</th><th>P/L full position</th>
+              <th class="group">Sold</th><th>Realized</th><th>Remaining</th><th>Cumulative</th>
+            </tr>
+          </thead>
+          <tbody id="out"></tbody>
+        </table>
+      </div>
+      <div class="note" id="note"></div>
+      <footer>P/L = (exit price − entry price) × 100 per contract. Fees and commissions are not included. Scale-outs are applied from the lowest take-profit upward.</footer>
+    </section>
   </div>
-
-  <h2>Take-profits</h2>
-  <div id="tps"></div>
-  <button id="add">+ Add TP</button>
-
-  <h2>Exits</h2>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr><th>Level</th><th>Price</th><th>P/L / contract</th><th>P/L full position</th><th>Sold</th><th>P/L sold</th><th>Remaining</th><th>Cumulative P/L</th></tr>
-      </thead>
-      <tbody id="out"></tbody>
-    </table>
-  </div>
-  <div class="note" id="note"></div>
-</main>
+</div>
 
 <script>
   const $ = id => document.getElementById(id);
@@ -77,65 +169,74 @@
     const row = document.createElement('div');
     row.className = 'tp-row';
     row.innerHTML =
-      '<label>TP % <input class="tp-pct" type="number" step="1" min="0" value="' + pct + '"></label>' +
-      '<label>Sell (optional) <input class="tp-sell" type="number" step="1" min="0" value="' + sell + '" placeholder="—"></label>' +
-      '<button class="x" title="Remove">✕</button>';
+      '<input class="tp-pct" type="number" inputmode="decimal" step="1" min="0" aria-label="Take-profit gain %" value="' + pct + '">' +
+      '<input class="tp-sell" type="number" inputmode="numeric" step="1" min="0" aria-label="Contracts to sell" placeholder="Optional" value="' + sell + '">' +
+      '<button class="remove" type="button" aria-label="Remove take-profit">×</button>';
     row.querySelector('button').onclick = () => { row.remove(); calc(); };
     tpsEl.appendChild(row);
     calc();
   }
 
   const num = v => { const n = parseFloat(v); return isFinite(n) ? n : null; };
-  const money = n => (n < 0 ? '-$' : '$') + Math.abs(n).toFixed(2);
+  const money = n => (n < 0 ? '−$' : n > 0 ? '+$' : '$') + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
   const cls = n => n < 0 ? 'neg' : n > 0 ? 'pos' : '';
+  const DASH = '<td class="dash">—</td>';
 
   function calc() {
     const entry = num($('entry').value);
     const qty = Math.max(0, Math.floor(num($('qty').value) || 0));
     const stopPct = num($('stop').value);
     const out = $('out');
-    out.innerHTML = '';
     $('note').textContent = '';
-    if (entry === null || entry <= 0) return;
+    $('summary').textContent = '';
 
-    const rows = [];
-
-    // Stop
-    if (stopPct !== null) {
-      const price = Math.max(0, entry * (1 - stopPct / 100));
-      const per = (price - entry) * 100;
-      rows.push('<tr class="stop"><td>Stop -' + stopPct + '%</td><td class="price">' + price.toFixed(2) +
-        '</td><td class="' + cls(per) + '">' + money(per) + '</td><td class="' + cls(per) + '">' + money(per * qty) +
-        '</td><td class="muted">—</td><td class="muted">—</td><td class="muted">—</td><td class="muted">—</td></tr>');
+    if (entry === null || entry <= 0) {
+      out.innerHTML = '<tr><td colspan="8" class="empty">Enter an entry premium to see your exit levels.</td></tr>';
+      return;
     }
+    $('summary').textContent = qty + (qty === 1 ? ' contract' : ' contracts') + ' at ' + entry.toFixed(2) +
+      ' — cost ' + money(entry * 100 * qty).replace('+', '');
 
-    // Take-profits, ascending
+    // Take-profits: compute scale-outs from lowest % upward
     const tps = [...tpsEl.querySelectorAll('.tp-row')]
       .map(r => ({ pct: num(r.querySelector('.tp-pct').value), sell: num(r.querySelector('.tp-sell').value) }))
       .filter(t => t.pct !== null)
       .sort((a, b) => a.pct - b.pct);
 
     let remaining = qty, cumulative = 0, capped = false;
-    for (const t of tps) {
+    const tpRows = tps.map(t => {
       const price = entry * (1 + t.pct / 100);
       const per = (price - entry) * 100;
-      let soldCells = '<td class="muted">—</td><td class="muted">—</td><td class="muted">—</td><td class="muted">—</td>';
+      let scale = '<td class="dash split">—</td>' + DASH + DASH + DASH;
       if (t.sell !== null && t.sell > 0) {
         let sold = Math.floor(t.sell);
         if (sold > remaining) { sold = remaining; capped = true; }
         remaining -= sold;
         const pl = per * sold;
         cumulative += pl;
-        soldCells = '<td>' + sold + '</td><td class="' + cls(pl) + '">' + money(pl) + '</td><td>' + remaining +
+        scale = '<td class="split">' + sold + '</td><td class="' + cls(pl) + '">' + money(pl) + '</td><td>' + remaining +
           '</td><td class="' + cls(cumulative) + '">' + money(cumulative) + '</td>';
       }
-      rows.push('<tr class="tp"><td>TP +' + t.pct + '%</td><td class="price">' + price.toFixed(2) +
+      return '<tr class="tp"><td class="level">TP +' + t.pct + '%</td><td class="price">' + price.toFixed(2) +
         '</td><td class="' + cls(per) + '">' + money(per) + '</td><td class="' + cls(per) + '">' + money(per * qty) +
-        '</td>' + soldCells + '</tr>');
+        '</td>' + scale + '</tr>';
+    });
+
+    // Ladder order: highest price first, entry, then stop
+    const rows = tpRows.reverse();
+    rows.push('<tr class="entry"><td class="level">Entry</td><td class="price">' + entry.toFixed(2) +
+      '</td><td>$0.00</td><td>$0.00</td><td class="dash split">—</td>' + DASH + DASH + DASH + '</tr>');
+
+    if (stopPct !== null) {
+      const price = Math.max(0, entry * (1 - stopPct / 100));
+      const per = (price - entry) * 100;
+      rows.push('<tr class="stop"><td class="level">Stop −' + stopPct + '%</td><td class="price">' + price.toFixed(2) +
+        '</td><td class="' + cls(per) + '">' + money(per) + '</td><td class="' + cls(per) + '">' + money(per * qty) +
+        '</td><td class="dash split">—</td>' + DASH + DASH + DASH + '</tr>');
     }
 
     out.innerHTML = rows.join('');
-    if (capped) $('note').textContent = 'Some "Sell" values exceeded remaining contracts and were capped.';
+    if (capped) $('note').textContent = 'One or more "Contracts to sell" values exceeded the contracts remaining and were reduced to fit.';
   }
 
   document.addEventListener('input', calc);
