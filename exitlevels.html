@@ -9,7 +9,10 @@
        remaining contracts, and cumulative P/L.
     Results update as you type. The ladder lists levels from highest price to lowest,
     with your entry in the middle. Clear blanks the entry, sets contracts to 1 and stop to 20%,
-    and restores take-profits to 20% and 50%. Scale-outs are applied from the lowest TP upward.
+    and restores take-profits to 20% and 50%.
+    Trailing stop (optional): enter the offset as % or $. The second table shows where a
+    thinkorswim TRAILSTOP would sit if price peaks at entry or at each take-profit,
+    and the P/L it locks in. Stop = peak x (1 - %) or peak - $. Scale-outs are applied from the lowest TP upward.
     P/L = (exit - entry) x 100 per contract. No fees included.
   Host on GitHub Pages or just open this file in a browser.
 -->
@@ -103,6 +106,13 @@
   .neg { color:var(--loss); } .pos { color:var(--gain); } .dash { color:#4E5D74; }
   .note { margin-top:12px; font-size:13px; color:var(--brass); min-height:1em; }
   footer { margin-top:28px; padding-top:16px; border-top:1px solid var(--rule); color:var(--slate); font-size:12px; }
+  .trail-row { display:grid; grid-template-columns:1fr 84px; gap:10px; }
+  select { width:100%; padding:10px 8px; font:16px var(--sans); color:var(--ivory); background:var(--ink);
+           border:1px solid var(--rule); border-radius:3px; }
+  select:focus { outline:none; border-color:var(--brass); box-shadow:0 0 0 1px var(--brass); }
+  .trail-section { margin-top:32px; }
+  .tos { margin:0 0 12px; font-size:14px; color:var(--slate); }
+  .tos strong { color:var(--brass); font-weight:500; }
   .empty { padding:28px 16px; color:var(--slate); text-align:center; }
 
   @media (max-width:860px) {
@@ -143,6 +153,14 @@
       <div class="tp-cols"><span>Gain %</span><span>Sell</span><span></span></div>
       <div id="tps"></div>
       <button class="add" id="add" type="button">Add take-profit</button>
+
+      <div class="tp-head"><h2>Trailing stop</h2></div>
+      <label class="field"><span>Trail offset</span>
+        <div class="trail-row">
+          <input id="trail" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Optional" aria-label="Trail offset">
+          <select id="trailUnit" aria-label="Trail offset unit"><option value="pct">%</option><option value="usd">$</option></select>
+        </div>
+      </label>
     </section>
 
     <section aria-label="Exit ladder">
@@ -162,7 +180,18 @@
         </table>
       </div>
       <div class="note" id="note"></div>
-      <footer>P/L = (exit price − entry price) × 100 per contract. Fees and commissions are not included. Scale-outs are applied from the lowest take-profit upward.</footer>
+
+      <div class="trail-section" id="trailSection" hidden>
+        <div class="ladder-head"><h2>Trailing stop</h2></div>
+        <p class="tos" id="tos"></p>
+        <div class="table-wrap">
+          <table class="num">
+            <thead><tr><th>Peak at</th><th>Peak</th><th>Trail stop</th><th>Locked / contract</th><th>Locked total</th></tr></thead>
+            <tbody id="trailOut"></tbody>
+          </table>
+        </div>
+      </div>
+      <footer>P/L = (exit price − entry price) × 100 per contract. Fees and commissions are not included. Scale-outs are applied from the lowest take-profit upward. Trailing stop = highest price reached minus the offset; it moves up with the price and never moves down.</footer>
     </section>
   </div>
 </div>
@@ -197,6 +226,7 @@
     $('summary').textContent = '';
 
     if (entry === null || entry <= 0) {
+      $('trailSection').hidden = true;
       out.innerHTML = '<tr><td colspan="8" class="empty">Enter an entry premium to see your exit levels.</td></tr>';
       return;
     }
@@ -242,13 +272,33 @@
     }
 
     out.innerHTML = rows.join('');
+    trailCalc(entry, qty, tps);
     if (capped) $('note').textContent = 'One or more "Contracts to sell" values exceeded the contracts remaining and were reduced to fit.';
   }
 
+  function trailCalc(entry, qty, tps) {
+    const off = num($('trail').value);
+    const pct = $('trailUnit').value === 'pct';
+    if (off === null || off <= 0) { $('trailSection').hidden = true; return; }
+    $('trailSection').hidden = false;
+    const stopAt = peak => Math.max(0, pct ? peak * (1 - off / 100) : peak - off);
+    $('tos').innerHTML = 'In thinkorswim: <strong>TRAILSTOP</strong>, link <strong>' + (pct ? 'MARK%' : 'MARK') +
+      '</strong>, offset <strong>−' + (pct ? off + '%' : off.toFixed(2)) + '</strong>';
+    const peaks = [{ label:'Entry', price:entry, cls:'entry' }]
+      .concat(tps.map(t => ({ label:'TP +' + t.pct + '%', price:entry * (1 + t.pct / 100), cls:'tp' })));
+    $('trailOut').innerHTML = peaks.reverse().map(p => {
+      const s = stopAt(p.price), per = (s - entry) * 100;
+      return '<tr class="' + p.cls + '"><td class="level">' + p.label + '</td><td>' + p.price.toFixed(2) +
+        '</td><td class="price">' + s.toFixed(2) + '</td><td class="' + cls(per) + '">' + money(per) +
+        '</td><td class="' + cls(per) + '">' + money(per * qty) + '</td></tr>';
+    }).join('');
+  }
+
   document.addEventListener('input', calc);
+  document.addEventListener('change', calc);
   $('add').onclick = () => addTP();
   $('clear').onclick = () => {
-    $('entry').value = ''; $('qty').value = '1'; $('stop').value = '20';
+    $('entry').value = ''; $('qty').value = '1'; $('stop').value = '20'; $('trail').value = '';
     tpsEl.innerHTML = '';
     addTP(20); addTP(50);
     $('entry').focus();
